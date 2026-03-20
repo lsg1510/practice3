@@ -43,7 +43,7 @@ STATION_DB = {
 
 try:
     data = load_data()
-    st.title("🚉 강남역 스마트 내비게이션 (v1.6)")
+    st.title("🚉 강남역 스마트 내비게이션 (v1.8)")
     
     # --- 사이드바 ---
     st.sidebar.header("📍 승객 위치 설정")
@@ -58,22 +58,19 @@ try:
 
     # --- TAB 1: 실시간 길찾기 ---
     with tabs[0]:
-        # 2번 수정사항: 인접 출구 4개만 표시하는 로직
         st.subheader(f"🚦 {selected_exit} 주변 혼잡도")
         
-        # 거리 계산 로직
+        # 인접 출구 계산 로직
         target_coords = np.array(STATION_DB["exits"][selected_exit]["coord"])
         distances = []
         for name, info in STATION_DB["exits"].items():
             dist = np.linalg.norm(target_coords - np.array(info["coord"]))
             distances.append((name, dist))
         
-        # 거리가 가까운 순으로 정렬 후 상위 4개 추출
         nearby_exits = sorted(distances, key=lambda x: x[1])[:4]
         
         cols = st.columns(4)
         for i, (name, _) in enumerate(nearby_exits):
-            # 10, 11번 출구 피크 시간 가중치
             weight = 1.3 if (8 <= current_hour <= 9 or 18 <= current_hour <= 19) and (name in ["10번 출구", "11번 출구"]) else 1.0
             score = congestion_score * weight
             status = "🔴 매우혼잡" if score > 0.7 else ("🟡 보통" if score > 0.4 else "🟢 원활")
@@ -81,27 +78,44 @@ try:
 
         st.divider()
 
-        # 지도 및 가이드
         m_col, g_col = st.columns([2, 1])
         with m_col:
-            st.subheader("🗺️ 실시간 최적 동선")
+            st.subheader("🗺️ 실시간 최적 동선 (Google Maps 기반)")
             center = [37.4979, 127.0276]
-            m = folium.Map(location=center, zoom_start=18, tiles="cartodbpositron")
+            
+            # --- 구글 지도 타일 설정 ---
+            # h: 하이브리드, m: 일반 지도, s: 위성, t: 지형, y: 도선 포함 위성
+            google_map_tile = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+            
+            m = folium.Map(
+                location=center, 
+                zoom_start=18, 
+                tiles=google_map_tile, 
+                attr='Google'
+            )
             
             target_coord = STATION_DB["exits"][selected_exit]["coord"]
+            
+            # 우회 경로 가시화 로직
             if (selected_exit in ["10번 출구", "11번 출구"]) and congestion_score > 0.6:
                 st.error("⚠️ 주요 출구 마비! 9번 출구 우회를 권장합니다.")
-                folium.PolyLine([center, STATION_DB["exits"]["9번 출구"]["coord"]], color="green", weight=5, dash_array='10').add_to(m)
+                # 마비된 경로 (빨간색)
+                folium.PolyLine([center, target_coord], color="#FF0000", weight=8, opacity=0.5).add_to(m)
+                # 추천 우회 경로 (녹색 점선)
+                folium.PolyLine([center, STATION_DB["exits"]["9번 출구"]["coord"]], color="#0F9D58", weight=6, dash_array='10').add_to(m)
+                folium.Marker(STATION_DB["exits"]["9번 출구"]["coord"], tooltip="우회 추천 출구").add_to(m)
             else:
-                folium.PolyLine([center, target_coord], color="blue", weight=5).add_to(m)
+                # 일반 경로 (구글 브랜드 컬러 파란색)
+                folium.PolyLine([center, target_coord], color="#4285F4", weight=6).add_to(m)
                 folium.Marker(target_coord, icon=folium.Icon(color="blue")).add_to(m)
+            
             st_folium(m, width="100%", height=450)
 
         with g_col:
             st.subheader("⏱️ Door-to-Gate")
             total_time = 4.0 + (congestion_score * 12)
             st.metric("지상까지 예상 시간", f"{total_time:.1f} 분")
-            st.info(f"📍 **{selected_exit} 정보**\n\n**장소:** {STATION_DB['exits'][selected_exit]['장소']}\n\n**하차문:** {STATION_DB['exits'][selected_exit]['door']}")
+            st.info(f"📍 **{selected_exit} 상세 정보**\n\n**주요 장소:** {STATION_DB['exits'][selected_exit]['장소']}\n\n**최적 하차문:** {STATION_DB['exits'][selected_exit]['door']}")
 
     # --- TAB 2: 역 정보 / 전체 시간표 ---
     with tabs[1]:
@@ -111,7 +125,7 @@ try:
             for k, v in STATION_DB["info"].items():
                 st.write(f"**{k}:** {v}")
             
-            st.subheader("🏁 첫차/막차")
+            st.subheader("🏁 첫차/막차 정보")
             st.table(pd.DataFrame({
                 "방면": ["평일(내선)", "평일(외선)", "휴일(내선)", "휴일(외선)"],
                 "첫차": ["05:30", "05:30", "05:30", "05:30"],
@@ -119,26 +133,16 @@ try:
             }))
         
         with t_col:
-            # 1번 수정사항: 전체 시간표 구현
-            st.subheader("📅 전체 시간대별 배차 정보 (05시~24시)")
-            
-            # 시간표 데이터 생성 (시뮬레이션)
+            st.subheader("📅 전체 시간대별 배차 간격")
             hours = [f"{i:02d}시" for i in range(5, 25)]
-            intervals = []
-            for h in range(5, 25):
-                if 8 <= h <= 9 or 18 <= h <= 19:
-                    intervals.append("2.5분 ~ 3분 (피크)")
-                elif 7 <= h <= 22:
-                    intervals.append("4분 ~ 6분 (정규)")
-                else:
-                    intervals.append("8분 ~ 12분 (심야/새벽)")
+            intervals = ["2.5분 ~ 3분 (피크)" if (8 <= h <= 9 or 18 <= h <= 19) else "4분 ~ 6분 (정규)" if 7 <= h <= 22 else "8분 ~ 12분" for h in range(5, 25)]
             
             full_timetable = pd.DataFrame({
                 "시간대": hours,
-                "내선순환(역삼방향)": intervals,
-                "외선순환(교대방향)": intervals
+                "내선순환": intervals,
+                "외선순환": intervals
             })
             st.dataframe(full_timetable, use_container_width=True, height=600)
 
 except Exception as e:
-    st.error(f"데이터 처리 오류: {e}")
+    st.error(f"데이터 렌더링 오류: {e}")
