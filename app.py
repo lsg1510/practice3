@@ -82,11 +82,23 @@ try:
         st.divider()
 
         # 지도 및 가이드
-        m_col, g_col = st.columns([2, 1])
+  m_col, g_col = st.columns([2, 1])
         with m_col:
-            st.subheader("🗺️ 실시간 최적 동선")
+            st.subheader("🗺️ 실시간 최적 동선 (Google Maps 기반)")
             center = [37.4979, 127.0276]
-            m = folium.Map(location=center, zoom_start=18, tiles="googlemap")
+            
+            # --- 구글 지도 타일 설정 ---
+            # h: 하이브리드, m: 일반 지도, s: 위성, t: 지형, y: 도선 포함 위성
+            google_map_tile = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+            
+            m = folium.Map(
+                location=center, 
+                zoom_start=18, 
+                tiles=google_map_tile, 
+                attr='Google'
+            )
+            
+            target_coord = STATION_DB["exits"][selected_exit]["coord"]
             
             target_coord = STATION_DB["exits"][selected_exit]["coord"]
             if (selected_exit in ["10번 출구", "11번 출구"]) and congestion_score > 0.6:
