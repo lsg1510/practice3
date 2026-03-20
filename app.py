@@ -38,7 +38,7 @@ try:
     # --- 상단 헤더 ---
     st.title("🚉 강남역 스마트 내비게이션 (App Developer Edition)")
     
-    tabs = st.tabs(["🔴 실시간 혼잡도/내비", "🕒 시간표/역 정보", "📋 리포트 분석"])
+    tabs = st.tabs(["🔴 실시간 혼잡도/내비", "🕒 시간표/역 정보"])
 
     with tabs[0]:
         # --- 사이드바 설정 ---
