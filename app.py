@@ -20,9 +20,8 @@ def load_data():
 try:
     data = load_data()
     
-    # --- UI 헤더 ---
-    st.title("📱 강남역 스마트 내비게이션 (Map Intelligence)")
-    st.caption("실시간 역사 주변 혼잡도 분석 및 지도 기반 최적 경로 가이드")
+    st.title("📱 강남역 스마트 내비게이션 (Structural Guide)")
+    st.caption("강남역 구조 기반 실시간 혼잡도 및 우회 경로 안내")
 
     # --- 사이드바: 승객 설정 ---
     st.sidebar.header("📍 실시간 위치 설정")
@@ -30,37 +29,32 @@ try:
     target_exit = st.sidebar.selectbox("목적지 출구", ["2번 출구", "7번 출구", "10번 출구", "11번 출구"])
 
     # 데이터 추출 및 혼잡도 엔진
-    col_on = f"{current_hour:02d}시-{current_hour+1:02d}시 승차인원"
     col_off = f"{current_hour:02d}시-{current_hour+1:02d}시 하차인원"
-    val_on, val_off = int(data[col_on]), int(data[col_off])
+    val_off = int(data[col_off])
     
     is_morning_peak = 7 <= current_hour <= 9
-    is_evening_peak = 17 <= current_hour <= 19
-    flow_intensity = val_off if is_morning_peak else val_on
-    congestion_score = min(flow_intensity / 150000, 1.0) 
+    congestion_score = min(val_off / 150000, 1.0) 
 
     # --- 1. 출구별 신호등 ---
     st.subheader("🚦 출구별 실시간 혼잡도")
     cols = st.columns(4)
-    exit_list = ["2번(테헤란로)", "7번(역삼방향)", "10번(강남대로)", "11번(강남대로)"]
+    exit_info = [("2번(테헤란로)", 0), ("7번(역삼방향)", 1), ("10번(강남대로)", 2), ("11번(강남대로)", 3)]
     
-    for i, ex in enumerate(exit_list):
-        if congestion_score > 0.7 and "10번" in ex or "11번" in ex:
-            status, color = "🔴 매우혼잡", "inverse"
-        elif congestion_score > 0.4:
-            status, color = "🟡 보통", "normal"
-        else:
-            status, color = "🟢 원활", "normal"
-        cols[i].metric(ex, status, delta_color=color)
+    for i, (name, idx) in enumerate(exit_info):
+        status = "🟢 원활"
+        if congestion_score > 0.7 and idx >= 2: status = "🔴 매우혼잡"
+        elif congestion_score > 0.4: status = "🟡 보통"
+        cols[i].metric(name, status)
 
     st.divider()
 
-    # --- 2 & 3. 지도 기반 최적 경로 가이드 ---
+    # --- 2 & 3. 지도 기반 평면도 가이드 ---
     col_map, col_guide = st.columns([2, 1])
 
-    # 강남역 및 주요 출구 좌표 (WGS84)
-    coords = {
-        "center": [37.4979, 127.0276],
+    # 강남역 내부 주요 구조물 좌표 (평면도 시각화를 위한 Relative 좌표값)
+    nodes = {
+        "platform": [37.4979, 127.0276],
+        "gate_center": [37.4981, 127.0276],
         "2번 출구": [37.4983, 127.0282],
         "7번 출구": [37.4975, 127.0280],
         "10번 출구": [37.4986, 127.0272],
@@ -68,51 +62,62 @@ try:
     }
 
     with col_map:
-        st.subheader("🗺️ 실시간 최적 경로 (Geospatial Guide)")
+        st.subheader("🗺️ 역구조 기반 최적 동선")
         
-        # 지도 생성 (네이버/구글 스타일의 기본 타일 사용)
-        m = folium.Map(location=coords["center"], zoom_start=17, tiles="cartodbpositron")
+        # 지도 배경을 가장 단순한 형태로 설정 (평면도 느낌)
+        m = folium.Map(
+            location=nodes["platform"], 
+            zoom_start=18, 
+            tiles="CartoDB positron", # 깨끗한 화이트톤 배경
+            zoom_control=False,
+            scrollWheelZoom=False,
+            dragging=True
+        )
 
-        # 경로 및 마커 로직
+        # 1. 역사 구조물 가이드라인 (평면도 선)
+        folium.PolyLine(
+            [nodes["10번 출구"], nodes["gate_center"], nodes["2번 출구"]],
+            color="#E0E0E0", weight=15, opacity=0.5
+        ).add_to(m)
+
+        # 2. 동적 경로 로직
         if is_morning_peak and congestion_score > 0.6:
-            # 10, 11번 출구 혼잡 구역 표시
-            folium.Circle(location=coords["10번 출구"], radius=30, color="red", fill=True, popup="병목지점").add_to(m)
-            folium.Circle(location=coords["11번 출구"], radius=30, color="red", fill=True, popup="병목지점").add_to(m)
+            # 병목 지점 (10, 11번 개찰구)
+            folium.Circle(nodes["10번 출구"], radius=20, color="red", fill=True, fill_opacity=0.6).add_to(m)
             
-            # 우회 경로 (초록색 점선)
-            path = [coords["center"], coords["2번 출구"]]
-            folium.PolyLine(path, color="green", weight=5, opacity=0.8, dash_array='10').add_to(m)
-            folium.Marker(coords["2번 출구"], icon=folium.Icon(color="green", icon="info-sign"), popup="최적 우회로").add_to(m)
-            route_msg = "⚠️ 10번 출구 방면 마비! **2번 출구 우회** 시 5분 단축 예상"
+            # 추천 우회 경로 (승강장 -> 2번 출구)
+            path = [nodes["platform"], nodes["gate_center"], nodes["2번 출구"]]
+            folium.PolyLine(path, color="green", weight=6, opacity=0.8, dash_array='10').add_to(m)
+            
+            folium.Marker(nodes["2번 출구"], tooltip="최적 우회", icon=folium.Icon(color="green")).add_to(m)
+            msg = "⚠️ 10, 11번 출구 집중 혼잡! **2번 출구**로 이동하세요."
         else:
             # 정상 경로
-            dest = coords.get(target_exit, coords["center"])
-            folium.PolyLine([coords["center"], dest], color="blue", weight=5).add_to(m)
-            folium.Marker(dest, icon=folium.Icon(color="blue")).add_to(m)
-            route_msg = "✅ 선택하신 출구로의 경로가 원활합니다."
+            dest_coords = nodes.get(target_exit, nodes["2번 출구"])
+            folium.PolyLine([nodes["platform"], dest_coords], color="blue", weight=5).add_to(m)
+            folium.Marker(dest_coords, icon=folium.Icon(color="blue")).add_to(m)
+            msg = "✅ 현재 선택하신 출구까지의 동선이 원활합니다."
 
-        # 지도를 Streamlit에 렌더링
         st_folium(m, width="100%", height=500)
 
     with col_guide:
-        st.subheader("⏱️ 소요 시간 분석")
-        base_walk = 4.0
-        wait_penalty = congestion_score * 12
-        total_time = base_walk + wait_penalty
+        st.subheader("⏱️ Door-to-Gate 분석")
+        base_time = 3.5
+        penalty = congestion_score * 10
+        total = base_time + penalty
         
-        st.metric("예상 소요 시간", f"{total_time:.1f} 분")
-        st.write(f"역사 내 혼잡도: **{congestion_score*100:.1f}%**")
+        st.metric("예상 소요 시간", f"{total:.1f} 분")
+        st.write(f"역사 내부 밀집도: **{congestion_score*100:.1f}%**")
         st.progress(congestion_score)
         
         if congestion_score > 0.6:
-            st.error(route_msg)
+            st.error(msg)
         else:
-            st.success(route_msg)
+            st.success(msg)
 
-    # --- 4. 가변 운영 알림 ---
-    if is_evening_peak:
-        st.toast("퇴근 시간 가변 게이트 운영 중", icon="⚠️")
-        st.sidebar.info("📢 **안내**: 현재 승차 인원 급증으로 인해 일부 게이트가 '승차 전용'으로 전환되었습니다.")
+    # --- 4. 가변 운영 알림 (퇴근 시간) ---
+    if 17 <= current_hour <= 19:
+        st.sidebar.warning("📢 **알림**: 퇴근 피크 시간대 개찰구 가변 운영 중 (일부 승차 전용)")
 
 except Exception as e:
-    st.error(f"애플리케이션 실행 중 오류가 발생했습니다: {e}")
+    st.error(f"App 실행 오류: {e}")
