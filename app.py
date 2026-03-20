@@ -70,11 +70,11 @@ try:
     # --- 상단 실시간 정보 ---
     next_inner, next_outer = get_next_train_time()
     t_col1, t_col2, t_col3 = st.columns([1, 1, 2])
-    with t_col1: st.info(f"🟢 **잠실 방면**\n\n**{next_inner}분 후**")
-    with t_col2: st.info(f"⚪ **신도림 방면**\n\n**{next_outer}분 후**")
+    with t_col1: st.info(f"🟢 **잠실 방면(내선)**\n\n**{next_inner}분 후**")
+    with t_col2: st.info(f"⚪ **신도림 방면(외선)**\n\n**{next_outer}분 후**")
     with t_col3: st.warning(STATION_DB["train_env"]["공지"])
 
-    # --- 사이드바 제어 ---
+    # --- 사이드바 ---
     st.sidebar.header("🕹️ 제어 센터")
     current_day = st.sidebar.selectbox("요일", list(WEEKDAY_WEIGHTS.keys()), index=datetime.now().weekday() if datetime.now().weekday() < 7 else 0)
     current_hour = st.sidebar.slider("시간대", 4, 23, datetime.now().hour)
@@ -97,7 +97,6 @@ try:
         best_detour = selected_exit
         detour_time = selected_exit_time
         
-        # 우회로 연산
         if is_crowded:
             other_exits = []
             for name, info in STATION_DB["exits"].items():
@@ -121,7 +120,7 @@ try:
 
         st.divider()
 
-        # --- 지도 시각화 (수정됨) ---
+        # --- 지도 및 출구 정보 비교 (v6.6 핵심 수정) ---
         col_map, col_info = st.columns([1.5, 1])
         
         with col_map:
@@ -129,16 +128,16 @@ try:
             m = folium.Map(location=center, zoom_start=18, tiles='https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', attr='Google')
             
             if is_crowded and best_detour != selected_exit:
-                # [혼잡 시] 선택 경로는 보조(파란 점선), 우회 경로는 강조(초록 실선)
+                # [혼잡 상황] 원래 경로는 보조 표시, 우회 경로를 메인으로 강조
                 folium.PolyLine([center, target_coords], color="blue", weight=3, opacity=0.4, dash_array='5').add_to(m)
                 folium.Marker(target_coords, popup=f"원래 목적지: {selected_exit}", icon=folium.Icon(color='lightgray', icon='info-sign')).add_to(m)
                 
                 detour_coords = STATION_DB["exits"][best_detour]["coord"]
-                folium.PolyLine([center, detour_coords], color="green", weight=7).add_to(m)
-                folium.Marker(detour_coords, popup=f"최적 우회: {best_detour}", icon=folium.Icon(color='green', icon='star')).add_to(m)
+                folium.PolyLine([center, detour_coords], color="green", weight=7, opacity=0.9).add_to(m)
+                folium.Marker(detour_coords, popup=f"추천 우회: {best_detour}", icon=folium.Icon(color='green', icon='star')).add_to(m)
             else:
-                # [쾌적 시] 원래 선택한 경로를 메인(파란 실선)으로 표시
-                folium.PolyLine([center, target_coords], color="blue", weight=7, opacity=0.8).add_to(m)
+                # [쾌적 상황] 원래 선택한 출구 경로를 진한 파란색으로 표시
+                folium.PolyLine([center, target_coords], color="blue", weight=8, opacity=0.8).add_to(m)
                 folium.Marker(target_coords, popup=f"최적 경로: {selected_exit}", icon=folium.Icon(color='blue', icon='home')).add_to(m)
                 
             st_folium(m, width="100%", height=500)
@@ -152,14 +151,14 @@ try:
             if is_crowded and best_detour != selected_exit:
                 st.divider()
                 st.markdown(f"### 🚀 추천 우회: {best_detour}")
-                st.success(f"현재 경로보다 **{time_difference:.1f}분** 단축 가능")
+                st.success(f"현재 위치에서 **{time_difference:.1f}분** 더 빠릅니다.")
                 st.write(f"**최적 하차문:** {STATION_DB['exits'][best_detour]['door']}")
                 st.write(f"**연계 교통:** {STATION_DB['exits'][best_detour]['bus']}")
             else:
-                st.success("✅ 현재 경로가 가장 빠르고 쾌적합니다.")
+                st.write("---")
+                st.info("✅ 현재 선택하신 출구가 가장 빠르고 쾌적한 경로입니다.")
 
     with tabs[1]:
-        # 역 상세 정보 및 시간표 (v6.5와 동일)
         st.subheader("🏢 역 상세 정보")
         inf1, inf2, inf3 = st.columns(3)
         with inf1: st.markdown(f"**📍 주소**\n\n{STATION_DB['general']['주소']}")
