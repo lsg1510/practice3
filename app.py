@@ -577,7 +577,7 @@ with tab_nav:
 
         # 선택 출구
         sel_info = STATION_DB["exits"][selected_exit]
-        esc_tag = '<span class="exit-tag green">에스컬레이터</span>' if sel_info["esc"] else ""
+        esc_tag = '<span class="exit-tag green">에스컬레이터</span>' if sel_info["esc"] else "<!-- no esc -->"
         st.markdown(f"""
         <div class="exit-card">
             <div class="exit-card-title">📍 {selected_exit} <span style="font-size:.75rem;color:#64748b;font-weight:400;">선택</span></div>
@@ -593,7 +593,7 @@ with tab_nav:
         # 우회 출구
         if is_crowded and best_detour != selected_exit:
             det_info = STATION_DB["exits"][best_detour]
-            det_esc = '<span class="exit-tag green">에스컬레이터</span>' if det_info["esc"] else ""
+            det_esc = '<span class="exit-tag green">에스컬레이터</span>' if det_info["esc"] else "<!-- no esc -->"
             st.markdown(f"""
             <div class="exit-card recommended">
                 <div class="exit-card-title">🚀 {best_detour}
