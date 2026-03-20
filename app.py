@@ -15,6 +15,7 @@ def load_data():
         df = pd.read_csv(file_path, encoding='utf-8')
     except:
         df = pd.read_csv(file_path, encoding='cp949')
+    # 강남역 2호선 데이터만 필터링
     return df[(df['지하철역'] == '강남') & (df['호선명'] == '2호선')].iloc[0]
 
 # --- 통합 데이터베이스 ---
@@ -22,6 +23,7 @@ STATION_DB = {
     "general": {
         "주소": "서울특별시 강남구 강남대로 지하 396 (역삼동)",
         "전화번호": "02-6110-2221",
+        "분실물센터": "02-6110-1122",
         "시설": "수유실(B1), 무인민원발급기(2, 7번 출구), 엘리베이터(1, 4, 5, 8, 9, 11, 12번)",
         "first_last": {
             "평일(내선)": ["05:30", "00:51"], "평일(외선)": ["05:30", "00:48"],
@@ -39,6 +41,8 @@ STATION_DB = {
         "12번 출구": {"장소": "국립어린이청소년도서관", "door": "교대 7-3, 역삼 4-2", "coord": [37.4991, 127.0281], "esc": True, "transit": "국기원 방면", "bus": "간선(421)"}
     },
     "train_env": {
+        "여름(약냉방)": "4, 7호차",
+        "겨울(강한히터)": "1, 10호차",
         "공지": "🚨 [실시간] 2호선 외선순환 차량 고장으로 약 5분 지연 중"
     }
 }
@@ -68,19 +72,20 @@ try:
     col_off = f"{current_hour:02d}시-{current_hour+1:02d}시 하차인원"
     base_count = get_safe_int(data[col_off])
     
-    # 1. 선택 출구 예상 시간 (초 단위 정밀도 위해 60 곱함)
+    # 기본 예상 소요 시간 계산
     final_congestion = min((base_count / 150000) * day_weight * weather_multiplier, 1.0)
-    default_time_sec = (4.0 + (final_congestion * 12)) * weather_multiplier * 60
+    selected_exit_time = (4.0 + (final_congestion * 12)) * weather_multiplier
     is_crowded = final_congestion > 0.65
 
     if mode == "일반 모드":
-        st.info(f"📊 **{current_day} {current_hour}시 분석:** 실시간 유동인구 기반 경로 가이드")
+        st.info(f"📊 **{current_day} {current_hour}시 분석:** 실시간 하차 인원 {base_count:,}명 기반 분석 결과입니다.")
         tabs = st.tabs(["🚀 실시간 동선 최적화", "🏢 역 정보 & 시간표"])
 
         with tabs[0]:
+            # --- 우회로 및 시간 정밀 연산 ---
             target_coords = np.array(STATION_DB["exits"][selected_exit]["coord"])
             best_detour = selected_exit
-            detour_time_sec = default_time_sec
+            detour_time = selected_exit_time
             
             if is_crowded:
                 other_exits = []
@@ -91,25 +96,25 @@ try:
                         other_exits.append((name, score))
                 
                 best_detour = sorted(other_exits, key=lambda x: x[1])[0][0]
-                # 우회 시 혼잡도 50% 감소 적용 및 이동 거리 페널티(60초) 추가
-                detour_time_sec = ((4.0 + (final_congestion * 0.5 * 12)) * weather_multiplier * 60) + 60
+                # 우회 시 혼잡도 감소(50%) 및 이동 거리 페널티(1분) 적용
+                detour_time = (4.0 + (final_congestion * 0.5 * 12)) * weather_multiplier + 1.0
 
-            # 차이 계산
-            time_diff_sec = default_time_sec - detour_time_sec
+            # 시간 차이 계산
+            time_difference = selected_exit_time - detour_time
 
-            # 상단 메트릭 표시
-            c1, c2, c3 = st.columns(3)
-            c1.metric("선택 출구 소요시간", f"{int(default_time_min // 60)}분 {int(default_time_min % 60)}초")
+            # 지표 표시
+            m1, m2, m3 = st.columns(3)
+            m1.metric("선택 출구 예상 시간", f"{selected_exit_time:.1f} 분")
             
             if is_crowded and best_detour != selected_exit:
-                c2.metric("우회 경로 소요시간", f"{int(detour_time_min // 60)}분 {int(detour_time_min % 60)}초")
-                c3.metric("단축 가능 시간", f"{time_diff_min:.1f}초", delta=f"{time_diff_min:.1f}s", delta_color="normal")
+                m2.metric("우회 경로 예상 시간", f"{detour_time:.1f} 분")
+                m3.metric("단축 가능 시간", f"{time_difference:.1f} 분", delta=f"-{time_difference:.1f}m", delta_color="normal")
                 
-                # 요청하신 형식의 안내 문구
-                st.success(f"💡 **최적 우회 경로:** {selected_exit} 정체가 심합니다. **{best_detour}** 이용 시 약 **{time_diff_min:.1f}분** 더 빨리 지상 도달이 가능합니다.")
+                # 요청하신 안내 문구 출력
+                st.success(f"💡 **최적 우회 경로:** {selected_exit} 정체가 심합니다. **{best_detour}** 이용 시 약 **{time_difference:.1f}분** 더 빨리 지상 도달이 가능합니다.")
             else:
-                c2.metric("우회 권장 여부", "원활함")
-                c3.metric("최종 상태", "최적 경로")
+                m2.metric("우회 경로 예상 시간", "-")
+                m3.metric("상태", "최적 경로 이용 중")
 
             st.divider()
 
@@ -118,18 +123,18 @@ try:
                 center = [37.4979, 127.0276]
                 m = folium.Map(location=center, zoom_start=18, tiles='https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', attr='Google')
                 
-                # 지도 표시 로직
-                display_exit = best_detour if (is_crowded and best_detour != selected_exit) else selected_exit
-                color = "green" if display_exit == best_detour and is_crowded else "blue"
-                
-                folium.PolyLine([center, STATION_DB["exits"][display_exit]["coord"]], color=color, weight=7).add_to(m)
-                folium.Marker(STATION_DB["exits"][display_exit]["coord"], icon=folium.Icon(color=color, icon='star')).add_to(m)
+                # 지도에 선택/우회 경로 표시
+                final_target = best_detour if is_crowded else selected_exit
+                folium.PolyLine([center, STATION_DB["exits"][final_target]["coord"]], color="green" if is_crowded else "blue", weight=7).add_to(m)
+                folium.Marker(STATION_DB["exits"][final_target]["coord"], icon=folium.Icon(color='green' if is_crowded else 'blue', icon='star')).add_to(m)
                 st_folium(m, width="100%", height=450)
 
             with col_info:
-                st.markdown(f"### 📍 {selected_exit} 정보")
+                st.markdown(f"### 📍 {selected_exit} 안내")
                 st.write(f"**최적 하차문:** {STATION_DB['exits'][selected_exit]['door']}")
                 st.write(f"**연계 교통:** {STATION_DB['exits'][selected_exit]['bus']}")
+                if weather == "🌧️ 비/눈" and not STATION_DB["exits"][selected_exit]["esc"]:
+                    st.error("⚠️ 계단 미끄러움 주의")
 
         with tabs[1]:
             st.table(pd.DataFrame(STATION_DB["general"]["first_last"], index=["첫차", "막차"]))
@@ -139,10 +144,10 @@ try:
         st.subheader("💬 강남역 Vibe-AI")
         user_query = st.text_input("질문을 입력하세요")
         if user_query:
-            msg = f"현재 {selected_exit} 이용 시 약 {default_time_sec/60:.1f}분이 소요됩니다."
             if is_crowded:
-                msg += f" {best_detour}로 우회하면 {time_diff_sec:.1f}초를 아낄 수 있어요!"
-            st.write(f"🤖 **분석:** {msg}")
+                st.write(f"🤖 **분석:** {selected_exit}은 현재 매우 혼잡하여 {selected_exit_time:.1f}분이 소요됩니다. {best_detour}로 우회하면 약 {time_difference:.1f}분 더 빨리 가실 수 있습니다.")
+            else:
+                st.write(f"🤖 **분석:** {selected_exit} 이용 시 약 {selected_exit_time:.1f}분 소요되며, 현재 동선이 가장 효율적입니다.")
 
 except Exception as e:
-    st.error(f"오류 발생: {e}")
+    st.error(f"시스템 오류: {e}")
