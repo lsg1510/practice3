@@ -112,28 +112,30 @@ try:
             st.toast("퇴근 시간대 가변 게이트(승차 전용) 운영 중", icon="⚠️")
 
     # --- TAB 2: 역 정보 / 시간표 ---
-    with tabs[1]:
-        i_col, t_col = st.columns(2)
-        with i_col:
-            st.subheader("🏢 역 정보")
-            for k, v in STATION_DB["info"].items():
-                st.write(f"**{k}:** {v}")
+with tabs[1]:
+        col_info, col_time = st.columns(2)
+        
+        with col_info:
+            st.subheader("🏢 강남역 시설 정보")
+            for k, v in STATION_INFO.items():
+                st.write(f"**{k}**: {v}")
             
-            st.subheader("🏁 첫차/막차")
+            st.subheader("📜 첫차/막차 시간표")
             st.table(pd.DataFrame({
-                "방면": ["평일(내선)", "평일(외선)", "토/일(내선)", "토/일(외선)"],
+                "방면": ["평일(내선)", "평일(외선)", "휴일(내선)", "휴일(외선)"],
                 "첫차": ["05:30", "05:30", "05:30", "05:30"],
                 "막차": ["00:51", "00:48", "23:55", "23:50"]
             }))
-        
-        with t_col:
-            st.subheader("🕒 열차 시간표 (대표 시간대)")
-            time_df = pd.DataFrame({
-                "시간": [f"{i}시" for i in range(7, 10)],
-                "평균 간격": ["2.5분", "3분", "4분"],
-                "비고": ["출근 피크", "출근 피크", "정규 배차"]
-            })
-            st.dataframe(time_df, use_container_width=True)
 
+        with col_time:
+            st.subheader("🕒 열차 도착 시간표 (평일 기준)")
+            # 샘플 시간표 생성 (실제 API 연동 가능 영역)
+            time_data = pd.DataFrame({
+                "시": [f"{i}시" for i in range(5, 25)],
+                "내선(역삼행)": ["05, 12, 20, 30..." for _ in range(20)],
+                "외선(교대행)": ["02, 08, 15, 22..." for _ in range(20)]
+            })
+            st.dataframe(time_data, use_container_width=True, height=500)
+            
 except Exception as e:
     st.error(f"데이터 파일 에러: {e}")
