@@ -106,7 +106,7 @@ try:
                 c3.metric("단축 가능 시간", f"{time_diff_sec:.1f}초", delta=f"{time_diff_sec:.1f}s", delta_color="normal")
                 
                 # 요청하신 형식의 안내 문구
-                st.success(f"💡 **최적 우회 경로:** {selected_exit} 정체가 심합니다. **{best_detour}** 이용 시 약 **{time_diff_sec:.1f}초** 더 빨리 지상 도달이 가능합니다.")
+                st.success(f"💡 **최적 우회 경로:** {selected_exit} 정체가 심합니다. **{best_detour}** 이용 시 약 **{time_diff_sec:.1f}분** 더 빨리 지상 도달이 가능합니다.")
             else:
                 c2.metric("우회 권장 여부", "원활함")
                 c3.metric("최종 상태", "최적 경로")
