@@ -140,14 +140,23 @@ try:
             st.table(pd.DataFrame(STATION_DB["general"]["first_last"], index=["첫차", "막차"]))
 
     # --- AI 챗봇 인터페이스 ---
-    else:
+else:
         st.subheader("💬 강남역 Vibe-AI")
-        user_query = st.text_input("질문을 입력하세요")
+        st.caption("자연어로 질문하면 데이터 기반으로 답변해 드립니다.")
+        user_query = st.text_input("무엇을 도와드릴까요?", placeholder="지금 비 오는데 11번 출구 많이 막혀?")
+        
         if user_query:
-            if is_crowded:
-                st.write(f"🤖 **분석:** {selected_exit}은 현재 매우 혼잡하여 {selected_exit_time:.1f}분이 소요됩니다. {best_detour}로 우회하면 약 {time_difference:.1f}분 더 빨리 가실 수 있습니다.")
+            if any(word in user_query for word in ["막혀", "혼잡", "사람", "많아"]):
+                status = "현재 발 디딜 틈이 없어요! ⚠️" if is_crowded else "쾌적하게 이동 가능합니다. ✨"
+                weather_msg = "비가 오니 에스컬레이터가 있는 출구를 강력 추천해요." if weather == "🌧️ 비/눈" else "날씨가 좋으니 이동하기 딱 좋네요!"
+                st.write(f"🤖 **Vibe 분석:** {status} {weather_msg} 현재 예상 유입 인원은 {base_count:,}명입니다.")
+            elif "버스" in user_query or "타야" in user_query:
+                st.write(f"🤖 **Vibe 분석:** {selected_exit}로 나가시면 {STATION_DB['exits'][selected_exit]['bus']}를 타기 가장 좋습니다. 환승 안내: {STATION_DB['exits'][selected_exit]['transit']}")
+            elif "추천" in user_query or "어디" in user_query:
+                target = STATION_DB['exits'][selected_exit]['recommend']
+                st.write(f"🤖 **Vibe 분석:** {selected_exit} 근처라면 **{target}**을 추천드려요. 현재 혼잡도를 고려한 최적의 장소입니다!")
             else:
-                st.write(f"🤖 **분석:** {selected_exit} 이용 시 약 {selected_exit_time:.1f}분 소요되며, 현재 동선이 가장 효율적입니다.")
+                st.write("🤖 **Vibe 분석:** 강남역의 '바이브'를 측정 중입니다. 요일, 시간, 날씨를 종합할 때 현재 컨디션은 나쁘지 않네요!")
 
 except Exception as e:
     st.error(f"시스템 오류: {e}")
