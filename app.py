@@ -182,13 +182,6 @@ try:
         st.table(pd.DataFrame(STATION_DB["general"]["first_last"], index=["첫차", "막차"]))
         
         st.divider()
-        st.subheader("📅 전체 시간표 (평일 기준 시뮬레이션)")
-        full_times = generate_full_timetable()
-        time_df = pd.DataFrame({
-            "잠실 방면(내선)": full_times,
-            "신도림 방면(외선)": [ (datetime.strptime(t, "%H:%M") + timedelta(minutes=2)).strftime("%H:%M") for t in full_times]
-        })
-        st.dataframe(time_df, use_container_width=True, height=400)
-
+     
 except Exception as e:
     st.error(f"시스템 오류: {e}")
