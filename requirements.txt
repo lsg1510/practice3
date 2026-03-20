@@ -1,5 +1,14 @@
-streamlit
-pandas
-folium
-streamlit-folium
-numpy
+# Core Framework
+streamlit>=1.31.0
+
+# Data Manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization & Mapping
+folium>=0.15.0
+streamlit-folium>=0.17.0
+plotly>=5.18.0
+
+# Utilities
+datetime
