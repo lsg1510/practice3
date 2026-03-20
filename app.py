@@ -86,7 +86,7 @@ try:
         with m_col:
             st.subheader("🗺️ 실시간 최적 동선")
             center = [37.4979, 127.0276]
-            m = folium.Map(location=center, zoom_start=18, tiles="cartodbpositron")
+            m = folium.Map(location=center, zoom_start=18, tiles="openstreetmap")
             
             target_coord = STATION_DB["exits"][selected_exit]["coord"]
             if (selected_exit in ["10번 출구", "11번 출구"]) and congestion_score > 0.6:
