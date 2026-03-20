@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 
 # 페이지 설정
-st.set_page_config(page_title="강남역 스마트 내비게이션 v6.4", layout="wide")
+st.set_page_config(page_title="강남역 스마트 내비게이션 v6.5", layout="wide")
 
 @st.cache_data
 def load_data():
@@ -28,7 +28,7 @@ STATION_DB = {
             "평일(내선-잠실)": ["05:30", "00:51"], "평일(외선-신도림)": ["05:30", "00:48"],
             "휴일(내선-잠실)": ["05:30", "23:55"], "휴일(외선-신도림)": ["05:30", "23:50"]
         },
-        "headway": 4  # 평균 배차 간격 (분)
+        "headway": 4
     },
     "exits": {
         "1번 출구": {"장소": "특허청, 역삼세무서", "door": "교대 1-1, 역삼 10-4", "coord": [37.4981, 127.0286], "esc": True, "transit": "택시 승강장", "bus": "광역(9404, 9503)"},
@@ -59,7 +59,6 @@ def get_next_train_time():
     next_outer = headway - ((minute + 2) % headway)
     return next_inner, next_outer
 
-# 전체 시간표 시뮬레이션 생성 함수
 def generate_full_timetable(start_hour=5, end_hour=24):
     headway = STATION_DB["general"]["headway"]
     timetable = []
@@ -71,7 +70,7 @@ def generate_full_timetable(start_hour=5, end_hour=24):
 
 try:
     data = load_data()
-    st.title("🚉 강남역 스마트 내비게이션 v6.4")
+    st.title("🚉 강남역 스마트 내비게이션 v6.5")
     
     # --- 상단 실시간 열차 도착 정보 ---
     next_inner, next_outer = get_next_train_time()
@@ -83,7 +82,7 @@ try:
     with t_col3:
         st.warning(STATION_DB["train_env"]["공지"])
 
-    # --- 사이드바 (AI 챗봇 제거) ---
+    # --- 사이드바 ---
     st.sidebar.header("🕹️ 제어 센터")
     current_day = st.sidebar.selectbox("요일", list(WEEKDAY_WEIGHTS.keys()), index=datetime.now().weekday() if datetime.now().weekday() < 7 else 0)
     current_hour = st.sidebar.slider("시간대", 4, 23, datetime.now().hour)
@@ -99,10 +98,10 @@ try:
     selected_exit_time = (4.0 + (final_congestion * 12)) * weather_multiplier
     is_crowded = final_congestion > 0.65
 
-    # 메인 탭 구성
     tabs = st.tabs(["🚀 실시간 동선 최적화", "🏢 역 정보 & 시간표"])
 
     with tabs[0]:
+        # --- 우회로 연산 로직 ---
         target_coords = np.array(STATION_DB["exits"][selected_exit]["coord"])
         best_detour = selected_exit
         detour_time = selected_exit_time
@@ -124,44 +123,72 @@ try:
         if is_crowded and best_detour != selected_exit:
             m2.metric("우회 경로 예상 시간", f"{detour_time:.1f} 분")
             m3.metric("단축 가능 시간", f"{time_difference:.1f} 분", delta=f"-{time_difference:.1f}m", delta_color="normal")
-            st.success(f"💡 **최적 우회 경로:** {selected_exit} 정체가 심합니다. **{best_detour}** 이용 시 약 **{time_difference:.1f}분** 더 빨리 지상 도달이 가능합니다.")
         else:
             m2.metric("우회 경로 예상 시간", "-")
             m3.metric("상태", "최적 경로 이용 중")
 
         st.divider()
-        col_map, col_info = st.columns([2, 1])
+
+        # --- 지도 및 출구 정보 비교 (수정된 섹션) ---
+        col_map, col_info = st.columns([1.5, 1])
+        
         with col_map:
             center = [37.4979, 127.0276]
             m = folium.Map(location=center, zoom_start=18, tiles='https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', attr='Google')
             final_target = best_detour if is_crowded else selected_exit
-            folium.PolyLine([center, STATION_DB["exits"][final_target]["coord"]], color="green" if is_crowded else "blue", weight=7).add_to(m)
-            folium.Marker(STATION_DB["exits"][final_target]["coord"], icon=folium.Icon(color='green' if is_crowded else 'blue', icon='star')).add_to(m)
-            st_folium(m, width="100%", height=450)
+            
+            # 선택한 경로 (파란색)
+            folium.PolyLine([center, target_coords], color="blue", weight=4, opacity=0.6, dash_array='5').add_to(m)
+            folium.Marker(target_coords, popup=f"선택: {selected_exit}", icon=folium.Icon(color='blue', icon='info-sign')).add_to(m)
+            
+            # 우회 경로 (있을 경우만 초록색 표시)
+            if is_crowded and best_detour != selected_exit:
+                detour_coords = STATION_DB["exits"][best_detour]["coord"]
+                folium.PolyLine([center, detour_coords], color="green", weight=7).add_to(m)
+                folium.Marker(detour_coords, popup=f"추천: {best_detour}", icon=folium.Icon(color='green', icon='star')).add_to(m)
+                
+            st_folium(m, width="100%", height=500)
 
         with col_info:
-            st.markdown(f"### 📍 {selected_exit} 안내")
+            # 1. 선택 출구 정보
+            st.markdown(f"### 📍 선택: {selected_exit}")
+            st.caption(f"주요 장소: {STATION_DB['exits'][selected_exit]['장소']}")
             st.write(f"**최적 하차문:** {STATION_DB['exits'][selected_exit]['door']}")
             st.write(f"**연계 교통:** {STATION_DB['exits'][selected_exit]['bus']}")
+            
+            st.write("---")
+            
+            # 2. 우회 출구 정보 (조건부 렌더링)
+            if is_crowded and best_detour != selected_exit:
+                st.markdown(f"### 🚀 추천 우회: {best_detour}")
+                st.success(f"현재 {selected_exit}보다 **{time_difference:.1f}분** 더 빠릅니다.")
+                st.caption(f"주요 장소: {STATION_DB['exits'][best_detour]['장소']}")
+                st.write(f"**최적 하차문:** {STATION_DB['exits'][best_detour]['door']}")
+                st.write(f"**연계 교통:** {STATION_DB['exits'][best_detour]['bus']}")
+                if STATION_DB['exits'][best_detour]['esc']:
+                    st.write("✅ 에스컬레이터 이용 가능")
+            else:
+                st.write("✅ **현재 선택하신 출구가 가장 효율적입니다.**")
 
-    # --- 역 정보 & 시간표 탭 강화 ---
     with tabs[1]:
         st.subheader("🏢 역 상세 정보")
         inf1, inf2, inf3 = st.columns(3)
-        with inf1:
-            st.markdown(f"**📍 주소**\n\n{STATION_DB['general']['주소']}")
-        with inf2:
-            st.markdown(f"**📞 대표 전화**\n\n{STATION_DB['general']['전화번호']}")
-        with inf3:
-            st.markdown(f"**📦 분실물 센터**\n\n{STATION_DB['general']['분실물센터']}")
+        with inf1: st.markdown(f"**📍 주소**\n\n{STATION_DB['general']['주소']}")
+        with inf2: st.markdown(f"**📞 대표 전화**\n\n{STATION_DB['general']['전화번호']}")
+        with inf3: st.markdown(f"**📦 분실물 센터**\n\n{STATION_DB['general']['분실물센터']}")
         
         st.divider()
-        
         st.subheader("🏁 첫차 / 막차 시간표")
         st.table(pd.DataFrame(STATION_DB["general"]["first_last"], index=["첫차", "막차"]))
         
         st.divider()
-
+        st.subheader("📅 전체 시간표 (평일 기준 시뮬레이션)")
+        full_times = generate_full_timetable()
+        time_df = pd.DataFrame({
+            "잠실 방면(내선)": full_times,
+            "신도림 방면(외선)": [ (datetime.strptime(t, "%H:%M") + timedelta(minutes=2)).strftime("%H:%M") for t in full_times]
+        })
+        st.dataframe(time_df, use_container_width=True, height=400)
 
 except Exception as e:
     st.error(f"시스템 오류: {e}")
